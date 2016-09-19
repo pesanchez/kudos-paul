@@ -1,0 +1,293 @@
+<link rel="import" href="kudos-login.html">
+<link rel="import" href="kudos-list.html">
+<dom-module id="kudos-demos">
+  <style include="shared-styles">
+    :host {
+      display: block;
+      padding: 1px;
+    }
+    .paper-header {
+      height: 60px;
+      font-size: 16px;
+      line-height: 60px;
+      padding: 0 10px;
+      color: white;
+      transition: height 0.2s;
+      background-color: blue !important;
+    }
+    paper-card {
+      margin:5px;
+    }
+    paper-card.rate { 
+      @apply(--layout-horizontal); 
+    }
+    .rate-content {
+      width: 100%;
+      @apply(--layout-flex);
+      float: left;
+    }
+    .rate-header { @apply(--paper-font-headline); }
+    .rate-name { color: var(--paper-grey-600); margin: 10px 0; }
+    paper-icon-button.rate-icon {
+      --iron-icon-fill-color: white;
+      --iron-icon-stroke-color: var(--paper-grey-600);
+      cursor: pointer;
+    }
+    paper-icon-button.rate-icon:hover{
+      background-color: #428500 !important;
+      color: blue;
+      font-size: x-small;
+    }
+    paper-icon-button.rate-ico[active]{
+    }
+    
+    paper-button.green {
+      background-color: #4285f4;
+      color: white;
+    }
+    paper-button.feeback {
+      text-transform: capitalize;
+      font-size: x-small;
+      background-color: var(--paper-indigo-500);
+      color: white;
+      padding: 3px !important;
+      --paper-button-raised-keyboard-focus: {
+        background-color: var(--paper-pink-a200) !important;
+        color: white !important;
+      };
+    }
+    .colorAviso{
+      color: #4285f4;
+      background-color: blue !important;
+      border-radius: 50%;
+    }
+    .avatar{
+      width:40px;height:40px!important;
+      border-radius: 50%;
+    }
+    .div_middle{
+      display:inline-block;
+      width:45%;
+    }
+    .div_feedback{
+      right: 0px;
+    }
+    .kudos {
+      width:95%;
+      margin: auto;
+      padding: 10px;
+    }    
+  </style>
+  <template>
+    <div hidden$="{{stateLogin}}" width="100%" style="text-align:center;">
+      Bienvenido a KUDOS, para poder dejar tus agradecimientos debes identificarte:<br>
+      <paper-button class="green" raised on-tap="signInWithGoogle">
+        <iron-icon icon="perm-identity"></iron-icon> Ingresar con mi cuenta Google
+      </paper-button>
+    </div>
+    <div hidden$="{{!stateLogin}}">
+      <img id="imgProfile" class="avatar">
+      ¡Bienvenido {{user.displayName}}!
+    </div>
+
+    <template id="resultList" is="dom-repeat" items="{{projects}}" as="project">
+      <paper-card class="rate">
+        <div class="rate-content">
+          <div class="card-content">
+            <div class="rate-header">{{project.name}}
+            </div>
+            <template is="dom-if" if="{{_anyTeam(project.team)}}">
+              <div class="rate-name">
+                <div class="div_middle">
+                  @{{project.team}}  
+                </div>
+                <div class="div_middle">
+                  <paper-button class="rate-icon feeback" id="{{project.id}}" data='{{project}}'
+                    on-tap="openModal">
+                    Danos feedback <iron-icon icon="announcement"></iron-icon>
+                  </paper-button>
+                </div>
+              </div>
+            </template>
+            <div>{{project.description}}</div>
+          </div>
+          <div class="kudos">
+            <kudos-list project="{{project}}" _firebase="{{_firebase}}" _user="{{userUid}}" on-click="_refresh"></kudos-list>  
+          </div>
+      </paper-card>
+    </template>
+    <paper-dialog id="feedback" >
+      <h2 id="titleFeedback">Feedback para:</h2>
+      <paper-textarea id="txtFeedback" label="Ingresa tu feedback..."></paper-textarea>
+      <div class="buttons">
+        <paper-button id="btnFeedback" on-click="sendFeedback" autofocus>Enviar</paper-button>
+        <paper-button dialog-dismiss>Cancelar</paper-button>
+      </div>
+    </paper-dialog>
+    <paper-toast id="toastAlert" text="Feedback registrado correctamente."></paper-toast>
+  </template>
+</dom-module>
+<script src="https://www.gstatic.com/firebasejs/3.0.4/firebase.js"></script>
+<script>
+  Polymer({
+    is: 'kudos-demos',
+    properties:{
+      _firebase:Object,
+      error:{
+        type: Object,
+        value:null,
+        notify:true
+      },
+      config:{
+        type:Object,
+        notify:true
+      },
+      stateLogin:{
+        type:Boolean,
+        value:false
+      },
+      userUid: {
+        type: String,
+        notify:true
+      },
+      user: { 
+        type: Object,
+        notify:true,
+        value: function() { return {}; }
+      },
+      projects:{
+        type: Array,
+        notify:true
+      },
+    },
+    attached:function(){
+      this.stateLogin=false;
+      this.loadFirebase();
+    },
+    ready:function(){
+      this.config = {
+        apiKey: "AIzaSyBiBdm3MheV4sN7lfk0WLoVDtXXxHxbbvk",
+        authDomain: "devnovators.firebaseapp.com",
+        databaseURL: "https://devnovators.firebaseio.com",
+        storageBucket: "devnovators.appspot.com",
+      };
+    },
+    loadFirebase:function(){
+      firebase.initializeApp(this.config);
+      var self=this;
+      firebase.auth().onAuthStateChanged(function(user) {
+        console.log(user.email);
+        if (user) {
+          self.setearValor(user);
+        } else {
+          console.log("no hay nadie conectado");
+        }
+      });
+      this._firebase=firebase;
+    },
+    signInWithGoogle:function() {
+      if (!firebase.auth().currentUser) {
+        var provider = new firebase.auth.GoogleAuthProvider();
+        firebase.auth().signInWithPopup(provider).then(function(result) {
+          // This gives you a Google Access Token. You can use it to access the Google API.
+          var token = result.credential.accessToken;
+          this.setearValor(user);
+          console.log(user.email);
+          //document.getElementById('quickstart-oauthtoken').textContent = token;
+        }).catch(function(error) {
+          this.error=error;
+          var errorCode = error.code;
+          var errorMessage = error.message;
+          var email = error.email;
+          // The firebase.auth.AuthCredential type that was used.
+          var credential = error.credential;
+          // [START_EXCLUDE]
+          if (errorCode === 'auth/account-exists-with-different-credential') {
+            alert('You have already signed up with a different auth provider for that email.');
+          } else {
+            console.error(error);
+          }
+        });
+      } else {
+        firebase.auth().signOut();
+      }
+      this._firebase=firebase;
+    },
+    signOut:function() {
+        this.error = null;
+        firebase.auth().signOut();
+        this.stateLogin=false;
+    },
+    _anyTeam:function(team){
+      if (team==null || team.length==0){
+        return false;
+      }else{
+        return true;
+      }
+    },
+    setearValor:function(user){
+      this.user=user;
+      this.userUid=user.uid;
+      this.$.imgProfile.src=user.photoURL;
+      this.stateLogin=true;
+      this.getProjects();
+    },
+    getProjects:function(){
+      var db = this._firebase.database();
+      var ref = db.ref("/projects");
+      var that = this;
+      that.projects = [];
+      ref.once("value").then(function(snapshot) {
+        snapshot.forEach(function(child) {
+          var project = child.val();
+          project.id=child.key;
+          that.push('projects', project);
+        });
+      });
+    },
+    getKudosProject:function(idProject){
+      var ref = firebase.database().db.ref("/users/" + this.userUid + "/" + idProject + "/kudos");
+      ref.once("value").then(function(snapshot) {
+        console.log(snapshot.val());
+      });
+    },
+    openModal:function(e){
+      var btnProject = Polymer.dom(e).localTarget;
+      var project=btnProject.data;
+      var self=this;
+      this.$.btnFeedback.data=project.id;
+      this.$.titleFeedback.innerHTML="Feedback para:<br>" + project.name;
+      this.$.feedback.open();
+      var ref = firebase.database().ref("/users/" + this.userUid + "/" + project.id +  "/comments");
+      ref.once('value').then(function(snapshot) {
+        if(snapshot.val()!=null){
+          var msg=snapshot.val().message;
+          self.$.txtFeedback.value=msg;  
+        }
+      });
+    },
+    sendFeedback:function(){
+      var db = this._firebase.database();
+      var idProject=this.$.btnFeedback.data;
+      var msg=this.$.txtFeedback.value;
+      var ref = db.ref("/users/" + this.userUid);
+      var postData = {
+        //author: this.userUid,
+        message: msg
+      };
+      //var newPostKey = ref.child('comments').push().key;
+      var updates = {};
+      updates["/" +idProject + "/comments"] = postData;
+      //updates['/users/' + this.userUid + '/' + newPostKey] = msg;
+      ref.update(updates); 
+      //this.getProjects();
+      this.$.txtFeedback.value="";
+      this.$.feedback.close();
+      this.$.toastAlert.open();
+    },
+    _refresh:function(){
+      //this.getProjects();
+    },
+  });
+</script>
+
